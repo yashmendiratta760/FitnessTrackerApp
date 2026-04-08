@@ -1,0 +1,8 @@
+CLOUD_API_KEY="cloudinary key"
+CLOUD_API_SECRET="cloudinary api secret key"
+CLOUD_NAME="cloudinary cloud name"
+MAIL_USERNAME="Email username"
+MAIL_PASSWORD="email pass"
+MONGODB_URI="mongo db url"
+SECRET_KEY="32-bit secret key"
+CLIENT_ID="google client id"
