@@ -1,0 +1,40 @@
+secret:
+  key: ${SECRET_KEY}
+
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: Fitness-Tracker
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+      database: Fitness_Tracker_db
+      auto-index-creation: true
+
+
+
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+cloudinary:
+  cloud_name: ${CLOUD_NAME}
+  api_key: ${CLOUD_API_KEY}
+  api_secret: ${CLOUD_API_SECRET}
+
+google:
+  client_id: ${CLIENT_ID}
