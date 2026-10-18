@@ -64,7 +64,7 @@ public class CloudinaryController
             String userName = authentication.getName();
 
             UserEntity user = userService.findByUserName(userName);
-            if(user==null) return new ResponseEntity<>("User not=t Found",HttpStatus.OK);
+            if(user==null) return new ResponseEntity<>("User not Found",HttpStatus.OK);
             return ResponseEntity.ok(user.getImageUrl());
         } catch (Exception e) {
             throw new RuntimeException(e);

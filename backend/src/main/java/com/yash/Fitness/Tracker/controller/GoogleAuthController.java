@@ -18,6 +18,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
@@ -42,6 +43,9 @@ public class GoogleAuthController {
 
     @Value("${google.client_id}")
     private String ClientId;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
 
 
@@ -72,7 +76,7 @@ public class GoogleAuthController {
             {
                 user = new UserEntity();
                 user.setEmail(email);
-                user.setPassword(UUID.randomUUID().toString());
+                user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
                 user.setUserName(name.replaceAll("\\s+", "_"));
 
                 UserDTO userDTO = new UserDTO();

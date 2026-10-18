@@ -29,17 +29,22 @@ public class StepsController
     @PostMapping("create-entry")
     public ResponseEntity<?> createEntry(@RequestBody StepsDTO stepsDTO)
     {
-        Authentication authentication   = SecurityContextHolder.getContext().getAuthentication();
-        String userName = authentication.getName();
-        UserEntity user =  userService.findByUserName(userName);
-        if(user!=null)
-        {
-            stepsService.saveEntry(stepsDTO,user.getUserName());
-            return new ResponseEntity<>(HttpStatus.OK);
-        }
-        else
-        {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userName = authentication.getName();
+            UserEntity user =  userService.findByUserName(userName);
+            if(user!=null)
+            {
+                stepsService.saveEntry(stepsDTO,user.getUserName());
+                return new ResponseEntity<>(HttpStatus.OK);
+            }
+            else
+            {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Some error occurred");
         }
 
     }
@@ -47,21 +52,25 @@ public class StepsController
     @GetMapping("getAll")
     public ResponseEntity<?> getAllEntries()
     {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String userName = authentication.getName();
-        UserEntity user = userService.findByUserName(userName);
-        if(user!=null)
-        {
-            List<StepsEntity> stepData =  stepsService.getAllEntries(userName);
-            List<StepsDTO> steps = stepData.stream()
-                    .map(data -> new StepsDTO(data.getSteps(),data.getDate()))
-                    .toList();
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userName = authentication.getName();
+            UserEntity user = userService.findByUserName(userName);
+            if(user!=null)
+            {
+                List<StepsEntity> stepData =  stepsService.getAllEntries(userName);
+                List<StepsDTO> steps = stepData.stream()
+                        .map(data -> new StepsDTO(data.getSteps(),data.getDate()))
+                        .toList();
 
-            return new ResponseEntity<>(steps,HttpStatus.OK);
-        }
-        else
-        {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+                return new ResponseEntity<>(steps,HttpStatus.OK);
+            }
+            else
+            {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Some error occurred");
         }
     }
 

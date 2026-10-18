@@ -48,6 +48,7 @@ public class UserController {
     {
         return new ResponseEntity<>("OK",HttpStatus.OK);
     }
+
     @PostMapping("/generate-otp")
     public ResponseEntity<String> generateOtp(@RequestBody UserDTO user) {
 
@@ -106,12 +107,10 @@ public class UserController {
             Authentication authentication = authenticationManager.authenticate(authenticationToken);
 
 
-            // Generate JWT token if authentication is successful
             String token = jwtUtils.generateToken(authentication.getName());
             return ResponseEntity.ok(new JwtResponse(token));
 
         } catch (BadCredentialsException e) {
-            // Return 401 Unauthorized if credentials are incorrect
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid username or password");
         }
     }
