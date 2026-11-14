@@ -35,6 +35,31 @@ object DataStoreManager {
     private val STEPS_GOAL = intPreferencesKey("stepsGoal")
     private val LAST_SYNC_DATE = stringPreferencesKey("lastSyncDate")
     private val EMAIL_ID = stringPreferencesKey("email")
+    private val SAVED_DAILY_STEPS = intPreferencesKey("saved_daily_steps")
+    private val LAST_SENSOR_STEPS = intPreferencesKey("last_sensor_steps")
+    private val SAVED_STEPS_DATE = stringPreferencesKey("saved_steps_date")
+
+    suspend fun saveStepCheckpoint(
+        context: Context,
+        dailySteps: Int,
+        sensorSteps: Int,
+        date: String
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[SAVED_DAILY_STEPS] = dailySteps
+            prefs[LAST_SENSOR_STEPS] = sensorSteps
+            prefs[SAVED_STEPS_DATE] = date
+        }
+    }
+
+    suspend fun getStepCheckpoint(context: Context): Triple<Int, Int, String?> {
+        val prefs = context.dataStore.data.first()
+        return Triple(
+            prefs[SAVED_DAILY_STEPS] ?: 0,
+            prefs[LAST_SENSOR_STEPS] ?: -1,
+            prefs[SAVED_STEPS_DATE]
+        )
+    }
 
     suspend fun getLastSyncDate(): String? {
         val preferences = appContext.dataStore.data.first()

@@ -11,5 +11,6 @@ enum class Screens
     Splash,
     ActivityRunning,
     Profile,
-    History
+    History,
+    Planner
 }

@@ -28,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.yash.fitnesstracker.ActivityPlannerScreen
 import com.yash.fitnesstracker.login_Signup.screens.Login
 import com.yash.fitnesstracker.login_Signup.screens.Otp
 import com.yash.fitnesstracker.login_Signup.screens.SignUp
@@ -157,6 +158,26 @@ fun Navigate(modifier: Modifier= Modifier,
                 uiState = appUiState,
                 isDarkTheme=isDarkTheme)
         }
+
+        composable(route = Screens.Planner.name,
+            enterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(500)
+                )
+            },
+            popExitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(500)
+                )
+            } )
+        {
+
+
+            ActivityPlannerScreen(navController,isDarkTheme )
+        }
+
 
 
         composable(route = "${Screens.ActivityRunning.name}?ScreenName={ScreenName}&Met={Met}",

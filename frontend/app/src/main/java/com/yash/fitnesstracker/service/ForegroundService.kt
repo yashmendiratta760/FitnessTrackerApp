@@ -1,3 +1,4 @@
+
 package com.yash.fitnesstracker.service
 
 import android.app.NotificationChannel
@@ -13,42 +14,76 @@ import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import com.yash.fitnesstracker.MainActivity
 import com.yash.fitnesstracker.R
 import com.yash.fitnesstracker.repository.StepRepository
-import com.yash.fitnesstracker.utils.StopwatchHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
-class ForegroundService:Service(), SensorEventListener {
+class ForegroundService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
-    private lateinit var stepSensor: Sensor
+    private var stepSensor: Sensor? = null
+
+    private val serviceScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val checkpointMutex = Mutex()
+
+    private var currentDate = ""
+    private var dailySteps = 0
+    private var lastSensorSteps = -1
+    private var lastCheckpointTime = 0L
+    private var initialized = false
+
+    private val checkpointIntervalMs = 30_000L
 
     override fun onCreate() {
         super.onCreate()
 
+        StepRepository.initialize(applicationContext)
+        DataStoreManager.init(applicationContext)
+
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)!!
+        stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
-        sensorManager.registerListener(this, stepSensor, SensorManager.SENSOR_DELAY_UI)
-        Log.d("Sensor", "registered")
+        if (stepSensor == null) {
+            Log.e("ForegroundService", "Step counter sensor unavailable")
+            stopSelf()
+            return
+        }
+
+        serviceScope.launch {
+            restoreCheckpoint()
+            startCheckpointLoop()
+        }
+
+        sensorManager.registerListener(
+            this,
+            stepSensor,
+            SensorManager.SENSOR_DELAY_UI
+        )
+
+        Log.d("ForegroundService", "Step sensor registered")
     }
 
-    override fun onBind(p0: Intent?): IBinder? {
-        return null
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int
+    ): Int {
         createNotificationChannel()
 
         val notificationIntent = Intent(this, MainActivity::class.java)
-        notificationIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-
 
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -57,18 +92,26 @@ class ForegroundService:Service(), SensorEventListener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-
-        val notification = NotificationCompat.Builder(this, "FitnessTrackerChannel")
+        val notification = NotificationCompat.Builder(
+            this,
+            "FitnessTrackerChannel"
+        )
             .setContentTitle("Steps Counter")
             .setContentText("Tracking your steps")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
+            .setOngoing(true)
             .build()
 
         startForeground(1, notification)
-        Log.d("ForegroundService", "Foreground started")
 
-
+        if (dailySteps > 0) {
+            StepRepository.updateSteps(dailySteps)
+        } else {
+            serviceScope.launch {
+                restoreCheckpoint()
+            }
+        }
 
         return START_STICKY
     }
@@ -80,85 +123,157 @@ class ForegroundService:Service(), SensorEventListener {
                 "Step Counter Service",
                 NotificationManager.IMPORTANCE_LOW
             )
-            val notificationManager: NotificationManager =
+
+            val manager =
                 getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+
+            manager.createNotificationChannel(channel)
         }
     }
 
-    private val stopwatch = StopwatchHelper()
-    private var isStopwatchRunning = false
-    private var lastStepTimestamp = System.currentTimeMillis()
-    private val serviceScope = CoroutineScope(Dispatchers.Default)
+    private suspend fun restoreCheckpoint() {
+        checkpointMutex.withLock {
+            val today = todayString()
+            val checkpoint = DataStoreManager.getStepCheckpoint(
+                applicationContext
+            )
 
+            if (checkpoint.third == today) {
+                dailySteps = checkpoint.first.coerceAtLeast(0)
+                lastSensorSteps = checkpoint.second
+            } else {
+                dailySteps = 0
+                lastSensorSteps = -1
+            }
 
-    @RequiresApi(Build.VERSION_CODES.O)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val roomEntity = StepRepository.getStepsForDate(today)
+                    if (roomEntity != null && roomEntity.steps > dailySteps) {
+                        dailySteps = roomEntity.steps
+                    }
+                }
+            } catch (_: Exception) {}
+
+            currentDate = today
+            initialized = true
+
+            StepRepository.updateSteps(dailySteps)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                StepRepository.insertOrUpdateInRoom(dailySteps)
+            }
+
+            Log.d(
+                "StepRecovery",
+                "Restored dailySteps=$dailySteps, lastSensorSteps=$lastSensorSteps"
+            )
+        }
+    }
+
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event == null || event.sensor.type != Sensor.TYPE_STEP_COUNTER) return
-
-        val stepSinceLastReboot = event.values[0].toInt()
-
-        CoroutineScope(Dispatchers.IO).launch {
-            var midnightBase = DataStoreManager.getMidnightBase(applicationContext)
-            if (midnightBase == 0) {
-                midnightBase = stepSinceLastReboot
-                DataStoreManager.saveMidnightBase(applicationContext, midnightBase)
-            }
-
-
-            val todaySteps = stepSinceLastReboot - midnightBase
-            if(todaySteps<0)
-            {
-                DataStoreManager.saveMidnightBase(applicationContext,todaySteps)
-            }
-
-            StepRepository.updateSteps(todaySteps)
-            StepRepository.insertOrUpdateInRoom(todaySteps)
+        if (event == null || event.sensor.type != Sensor.TYPE_STEP_COUNTER) {
+            return
         }
 
-            if (!isStopwatchRunning) {
-                serviceScope.launch {
-                    val storedElapsed = DataStoreManager.getTime(applicationContext)
+        val sensorSteps = event.values[0].toLong()
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
 
-                    if (storedElapsed == 0L) {
-                        stopwatch.reset()
-                    } else {
-                        stopwatch.setElapsedTime(storedElapsed)
-                    }
-                    stopwatch.start(serviceScope) { elapsed ->
-                        StepRepository.updateTime(time = (elapsed / 1000) / 60)
-                        serviceScope.launch {
-                            DataStoreManager.saveTime(applicationContext, elapsed)
-                        }
-//                        val x = (elapsed / 1000) / 60
-                    }
-                    isStopwatchRunning = true
+        serviceScope.launch {
+            checkpointMutex.withLock {
+                if (!initialized) return@withLock
+
+                val today = todayString()
+
+                if (today != currentDate) {
+                    currentDate = today
+                    dailySteps = 0
+                    lastSensorSteps = sensorSteps
+
+                    saveCheckpoint(sensorSteps)
+                    return@withLock
+                }
+
+                if (lastSensorSteps < 0) {
+                    // First reading after startup/reboot:
+                    // retain the restored daily total and establish a new baseline.
+                    lastSensorSteps = sensorSteps
+                } else if (sensorSteps >= lastSensorSteps) {
+                    dailySteps += sensorSteps - lastSensorSteps
+                    lastSensorSteps = sensorSteps
+                } else {
+                    // Sensor counter reset or restarted.
+                    // Do not discard the steps already saved for today.
+                    lastSensorSteps = sensorSteps
+                }
+
+                StepRepository.updateSteps(dailySteps)
+
+                val now = System.currentTimeMillis()
+                if (now - lastCheckpointTime >= checkpointIntervalMs) {
+                    saveCheckpoint(sensorSteps)
                 }
             }
-
-            lastStepTimestamp = System.currentTimeMillis()
-            serviceScope.launch {
-                delay(10_000)
-                if (System.currentTimeMillis() - lastStepTimestamp >= 10_000 && isStopwatchRunning) {
-                    stopwatch.stop()
-                    isStopwatchRunning = false
-                    Log.d("Stopwatch", "Paused due to inactivity")
-                }
-            }
-
-
         }
-
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-
     }
+
+    private suspend fun startCheckpointLoop() {
+        while (true) {
+            delay(checkpointIntervalMs)
+
+            checkpointMutex.withLock {
+                if (!initialized) return@withLock
+
+                val today = todayString()
+
+                if (today != currentDate) {
+                    currentDate = today
+                    dailySteps = 0
+                    lastSensorSteps = -1
+                    StepRepository.updateSteps(0)
+                }
+
+                saveCheckpoint(lastSensorSteps)
+            }
+        }
+    }
+
+    private suspend fun saveCheckpoint(sensorSteps: Int) {
+        val today = todayString()
+
+        DataStoreManager.saveStepCheckpoint(
+            context = applicationContext,
+            dailySteps = dailySteps,
+            sensorSteps = sensorSteps,
+            date = today
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            StepRepository.insertOrUpdateInRoom(dailySteps)
+        }
+        lastCheckpointTime = System.currentTimeMillis()
+
+        Log.d(
+            "StepCheckpoint",
+            "Saved $dailySteps steps for $today"
+        )
+    }
+
+    private fun todayString(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            LocalDate.now().format(DateTimeFormatter.ISO_DATE)
+        } else {
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        super.onDestroy()
-
-        // Unregister the sensor listener when service is destroyed
         sensorManager.unregisterListener(this)
+        serviceScope.cancel()
+        super.onDestroy()
     }
-
 }

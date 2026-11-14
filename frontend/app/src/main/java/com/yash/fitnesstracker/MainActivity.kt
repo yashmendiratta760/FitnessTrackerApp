@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
         DataStoreManager.init(this)
         val appViewModel = androidx.lifecycle.ViewModelProvider(this, AppViewModel.Factory)[AppViewModel::class.java]
 
-        appViewModel.scheduleDailyStepUpload(this)
+        appViewModel.scheduleStepUpload(this)
 
         enableEdgeToEdge()
         setContent {

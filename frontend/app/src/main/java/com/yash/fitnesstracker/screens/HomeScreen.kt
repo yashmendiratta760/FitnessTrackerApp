@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -50,6 +52,7 @@ import com.yash.fitnesstracker.utils.Bg
 import com.yash.fitnesstracker.viewmodel.AppUiState
 import com.yash.fitnesstracker.viewmodel.UserViewModel
 import com.yash.fitnesstracker.viewmodel.AppViewModel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.DecimalFormat
 
@@ -73,8 +76,18 @@ fun HomeScreen(modifier: Modifier= Modifier,
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
+        appViewModel.scheduleStepUpload(context.applicationContext)
         appViewModel.syncStepsOncePerDay()
+    }
 
+    LaunchedEffect(Unit) {
+        appViewModel.errorEvent.collectLatest { message ->
+            Toast.makeText(
+                context,
+                message,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 //    LaunchedEffect(Unit) {
 //        simulateMidnightBase(context,26880)
@@ -144,9 +157,11 @@ fun HomeScreen(modifier: Modifier= Modifier,
                             RoundedCornerShape(30.dp)
                         )
 
-                        .clickable(onClick = { coroutineScope.launch {
-                            if(drawerState.isClosed) drawerState.open()
-                        }}),
+                        .clickable(onClick = {
+                            coroutineScope.launch {
+                                if (drawerState.isClosed) drawerState.open()
+                            }
+                        }),
                     contentAlignment = Alignment.TopStart
                 ) {
                     Icon(imageVector = Icons.Default.Menu,
@@ -207,11 +222,11 @@ fun HomeScreen(modifier: Modifier= Modifier,
                                 fontSize = 20.sp
                             )
                         }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val x = (elapsedTime / 1000) / 60
-                            Text(text = "$x", color = color, fontSize = 30.sp)
-                            Text("Time", fontSize = 20.sp)
-                        }
+//                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+//                            val x = (elapsedTime / 1000) / 60
+//                            Text(text = "$x", color = color, fontSize = 30.sp)
+//                            Text("Time", fontSize = 20.sp)
+//                        }
                     }
                 }
                 item {
@@ -242,6 +257,18 @@ fun HomeScreen(modifier: Modifier= Modifier,
                             },
                             iconColor = Color.Green,
                             icon = Icons.AutoMirrored.Filled.DirectionsRun,
+                            modifier = Modifier.padding(
+                                top = 16.dp, start = 16.dp,
+                                end = 16.dp
+                            ),
+                            isDarkTheme = isDarkTheme
+                        )
+                        CustomizedButton(
+                            text = "Planner", onClick = {
+                                navController.navigate(Screens.Planner.name)
+                            },
+                            iconColor = Color.White,
+                            icon = Icons.Filled.Timer,
                             modifier = Modifier.padding(
                                 top = 16.dp, start = 16.dp,
                                 end = 16.dp
